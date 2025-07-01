@@ -1,3 +1,5 @@
+#![no_std]
+
 #[allow(async_fn_in_trait)]
 pub trait Storage {
     type Error;
@@ -44,6 +46,7 @@ pub trait Storage {
 
 /// The way multiple writes act on the storage
 #[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum WriteBehavior {
     /// The memory can be written once and must then be erased.
     /// It's undefined what happens if [Storage::write] is called more than once without erasing.
@@ -65,6 +68,7 @@ pub enum WriteBehavior {
 }
 
 /// The reliability of the storage medium
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Reliability {
     /// The storage is always reliable (e.g. ECC RAM)
     Good,
