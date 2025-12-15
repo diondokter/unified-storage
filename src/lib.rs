@@ -20,23 +20,21 @@ pub trait Storage {
     const ERASE_VALUE: u8;
     /// How successive writes behave
     const WRITE_BEHAVIOR: WriteBehavior;
-    /// The reliability of the storage
-    const RELIABILITY: Reliability;
 
     /// The capacity, or highest address (exclusive)
     fn capacity(&self) -> usize;
 
     /// Read a slice of data from the storage peripheral, starting the read operation at the given address offset, and reading `bytes.len()` bytes.
-    /// 
+    ///
     /// The read offset must be aligned to `READ_SIZE` and the `bytes.len()` must be a multiple of `READ_SIZE` or an error will be returned.
     async fn read(&mut self, offset: u32, bytes: &mut [u8]) -> Result<(), Self::Error>;
     /// Erase the given storage range, clearing all data within [from..to]. The given range will contain all `ERASE_VALUE` bytes afterwards.
     /// If power is lost during erase, contents of the page are undefined.
-    /// 
+    ///
     /// The `from` and `to` must be aligned to `ERASE_SIZE` or an error will be returned.
     async fn erase(&mut self, from: u32, to: u32) -> Result<(), Self::Error>;
     /// Write a slice of data to the storage peripheral, starting the write operation at the given address offset, and writing `bytes.len()` bytes.
-    /// 
+    ///
     /// The write offset must be aligned to `WRITE_SIZE` and the `bytes.len()` must be a multiple of `WRITE_SIZE` or an error will be returned.
     /// The operation follows the behavior as specified by `WRITE_BEHAVIOR`.
     async fn write(&mut self, offset: u32, bytes: &[u8]) -> Result<(), Self::Error>;
@@ -67,21 +65,6 @@ pub enum WriteBehavior {
     InfiniteDirect,
 }
 
-/// The reliability of the storage medium
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Reliability {
-    /// The storage is always reliable (e.g. ECC RAM)
-    Good,
-    /// The storage is mostly reliable, though random bitflips can happen (e.g. non-ECC RAM)
-    Medium,
-    /// The storage is reliably by design. The storage can get bad at the end of life (e.g. ECC NOR)
-    GoodDegrading,
-    /// The storage is mostly reliable by design, though random bitflips can happen. The storage can get bad at the end of life (e.g. non-ECC NOR & ECC NAND)
-    MediumDegrading,
-    /// The storage is always unreliable and it behooves the user to add error correction (e.g. non-ECC NAND)
-    Bad,
-}
-
 pub struct MultiWriteNorFlash<S>(S)
 where
     S: embedded_storage_async::nor_flash::MultiwriteNorFlash;
@@ -98,7 +81,6 @@ where
 
     const ERASE_VALUE: u8 = 0xFF;
     const WRITE_BEHAVIOR: WriteBehavior = WriteBehavior::TwiceAnd;
-    const RELIABILITY: Reliability = Reliability::MediumDegrading;
 
     fn capacity(&self) -> usize {
         self.0.capacity()
@@ -137,7 +119,6 @@ where
 
     const ERASE_VALUE: u8 = 0xFF;
     const WRITE_BEHAVIOR: WriteBehavior = WriteBehavior::Once;
-    const RELIABILITY: Reliability = Reliability::MediumDegrading;
 
     fn capacity(&self) -> usize {
         self.0.capacity()
