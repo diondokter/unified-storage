@@ -65,6 +65,48 @@ pub enum WriteBehavior {
     InfiniteDirect,
 }
 
+impl<T: Storage> Storage for &mut T {
+    type Error = T::Error;
+
+    const READ_SIZE: usize = T::READ_SIZE;
+
+    const WRITE_SIZE: usize = T::WRITE_SIZE;
+
+    const ERASE_SIZE: usize = T::ERASE_SIZE;
+
+    const ERASE_VALUE: u8 = T::ERASE_VALUE;
+
+    const WRITE_BEHAVIOR: WriteBehavior = T::WRITE_BEHAVIOR;
+
+    fn capacity(&self) -> usize {
+        T::capacity(self)
+    }
+
+    fn read(
+        &mut self,
+        offset: u32,
+        bytes: &mut [u8],
+    ) -> impl Future<Output = Result<(), Self::Error>> {
+        T::read(self, offset, bytes)
+    }
+
+    fn erase(&mut self, from: u32, to: u32) -> impl Future<Output = Result<(), Self::Error>> {
+        T::erase(self, from, to)
+    }
+
+    fn write(
+        &mut self,
+        offset: u32,
+        bytes: &[u8],
+    ) -> impl Future<Output = Result<(), Self::Error>> {
+        T::write(self, offset, bytes)
+    }
+
+    fn flush(&mut self) -> impl Future<Output = Result<(), Self::Error>> {
+        T::flush(self)
+    }
+}
+
 pub struct MultiWriteNorFlash<S>(S)
 where
     S: embedded_storage_async::nor_flash::MultiwriteNorFlash;
