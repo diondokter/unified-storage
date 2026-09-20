@@ -8,11 +8,11 @@ pub trait Storage {
     ///
     /// This should be 1, unless there's really no way to read one byte.
     /// Ideally the driver can emulate single-byte reads if the hardware doesn't support it.
-    const READ_SIZE: usize;
+    const READ_SIZE: u64;
     /// The smallest size that can be written to the storage.
-    const WRITE_SIZE: usize;
+    const WRITE_SIZE: u64;
     /// The smallest size that can be erased from the storage.
-    const ERASE_SIZE: usize;
+    const ERASE_SIZE: u64;
 
     /// The value the storage is set to after erasing
     ///
@@ -22,22 +22,22 @@ pub trait Storage {
     const WRITE_BEHAVIOR: WriteBehavior;
 
     /// The capacity, or highest address (exclusive)
-    fn capacity(&self) -> usize;
+    fn capacity(&self) -> u64;
 
     /// Read a slice of data from the storage peripheral, starting the read operation at the given address offset, and reading `bytes.len()` bytes.
     ///
     /// The read offset must be aligned to `READ_SIZE` and the `bytes.len()` must be a multiple of `READ_SIZE` or an error will be returned.
-    async fn read(&mut self, offset: u32, bytes: &mut [u8]) -> Result<(), Self::Error>;
+    async fn read(&mut self, offset: u64, bytes: &mut [u8]) -> Result<(), Self::Error>;
     /// Erase the given storage range, clearing all data within [from..to]. The given range will contain all `ERASE_VALUE` bytes afterwards.
     /// If power is lost during erase, contents of the page are undefined.
     ///
     /// The `from` and `to` must be aligned to `ERASE_SIZE` or an error will be returned.
-    async fn erase(&mut self, from: u32, to: u32) -> Result<(), Self::Error>;
+    async fn erase(&mut self, from: u64, to: u64) -> Result<(), Self::Error>;
     /// Write a slice of data to the storage peripheral, starting the write operation at the given address offset, and writing `bytes.len()` bytes.
     ///
     /// The write offset must be aligned to `WRITE_SIZE` and the `bytes.len()` must be a multiple of `WRITE_SIZE` or an error will be returned.
     /// The operation follows the behavior as specified by `WRITE_BEHAVIOR`.
-    async fn write(&mut self, offset: u32, bytes: &[u8]) -> Result<(), Self::Error>;
+    async fn write(&mut self, offset: u64, bytes: &[u8]) -> Result<(), Self::Error>;
     /// Wait for the last operation to finish
     async fn flush(&mut self) -> Result<(), Self::Error>;
 }
@@ -68,35 +68,35 @@ pub enum WriteBehavior {
 impl<T: Storage> Storage for &mut T {
     type Error = T::Error;
 
-    const READ_SIZE: usize = T::READ_SIZE;
+    const READ_SIZE: u64 = T::READ_SIZE;
 
-    const WRITE_SIZE: usize = T::WRITE_SIZE;
+    const WRITE_SIZE: u64 = T::WRITE_SIZE;
 
-    const ERASE_SIZE: usize = T::ERASE_SIZE;
+    const ERASE_SIZE: u64 = T::ERASE_SIZE;
 
     const ERASE_VALUE: u8 = T::ERASE_VALUE;
 
     const WRITE_BEHAVIOR: WriteBehavior = T::WRITE_BEHAVIOR;
 
-    fn capacity(&self) -> usize {
+    fn capacity(&self) -> u64 {
         T::capacity(self)
     }
 
     fn read(
         &mut self,
-        offset: u32,
+        offset: u64,
         bytes: &mut [u8],
     ) -> impl Future<Output = Result<(), Self::Error>> {
         T::read(self, offset, bytes)
     }
 
-    fn erase(&mut self, from: u32, to: u32) -> impl Future<Output = Result<(), Self::Error>> {
+    fn erase(&mut self, from: u64, to: u64) -> impl Future<Output = Result<(), Self::Error>> {
         T::erase(self, from, to)
     }
 
     fn write(
         &mut self,
-        offset: u32,
+        offset: u64,
         bytes: &[u8],
     ) -> impl Future<Output = Result<(), Self::Error>> {
         T::write(self, offset, bytes)
@@ -117,26 +117,30 @@ where
 {
     type Error = S::Error;
 
-    const READ_SIZE: usize = S::READ_SIZE;
-    const WRITE_SIZE: usize = S::WRITE_SIZE;
-    const ERASE_SIZE: usize = S::ERASE_SIZE;
+    const READ_SIZE: u64 = S::READ_SIZE as u64;
+    const WRITE_SIZE: u64 = S::WRITE_SIZE as u64;
+    const ERASE_SIZE: u64 = S::ERASE_SIZE as u64;
 
     const ERASE_VALUE: u8 = 0xFF;
     const WRITE_BEHAVIOR: WriteBehavior = WriteBehavior::TwiceAnd;
 
-    fn capacity(&self) -> usize {
-        self.0.capacity()
+    fn capacity(&self) -> u64 {
+        self.0.capacity() as u64
     }
 
-    async fn read(&mut self, offset: u32, bytes: &mut [u8]) -> Result<(), Self::Error> {
+    async fn read(&mut self, offset: u64, bytes: &mut [u8]) -> Result<(), Self::Error> {
+        let offset = offset.try_into().expect("offset fits in u32 for embedded-storage");
         self.0.read(offset, bytes).await
     }
 
-    async fn erase(&mut self, from: u32, to: u32) -> Result<(), Self::Error> {
+    async fn erase(&mut self, from: u64, to: u64) -> Result<(), Self::Error> {
+        let from = from.try_into().expect("from fits in u32 for embedded-storage");
+        let to = to.try_into().expect("to fits in u32 for embedded-storage");
         self.0.erase(from, to).await
     }
 
-    async fn write(&mut self, offset: u32, bytes: &[u8]) -> Result<(), Self::Error> {
+    async fn write(&mut self, offset: u64, bytes: &[u8]) -> Result<(), Self::Error> {
+        let offset = offset.try_into().expect("offset fits in u32 for embedded-storage");
         self.0.write(offset, bytes).await
     }
 
@@ -155,26 +159,30 @@ where
 {
     type Error = S::Error;
 
-    const READ_SIZE: usize = S::READ_SIZE;
-    const WRITE_SIZE: usize = S::WRITE_SIZE;
-    const ERASE_SIZE: usize = S::ERASE_SIZE;
+    const READ_SIZE: u64 = S::READ_SIZE as u64;
+    const WRITE_SIZE: u64 = S::WRITE_SIZE as u64;
+    const ERASE_SIZE: u64 = S::ERASE_SIZE as u64;
 
     const ERASE_VALUE: u8 = 0xFF;
     const WRITE_BEHAVIOR: WriteBehavior = WriteBehavior::Once;
 
-    fn capacity(&self) -> usize {
-        self.0.capacity()
+    fn capacity(&self) -> u64 {
+        self.0.capacity() as u64
     }
 
-    async fn read(&mut self, offset: u32, bytes: &mut [u8]) -> Result<(), Self::Error> {
+    async fn read(&mut self, offset: u64, bytes: &mut [u8]) -> Result<(), Self::Error> {
+        let offset = offset.try_into().expect("offset fits in u32 for embedded-storage");
         self.0.read(offset, bytes).await
     }
 
-    async fn erase(&mut self, from: u32, to: u32) -> Result<(), Self::Error> {
+    async fn erase(&mut self, from: u64, to: u64) -> Result<(), Self::Error> {
+        let from = from.try_into().expect("from fits in u32 for embedded-storage");
+        let to = to.try_into().expect("to fits in u32 for embedded-storage");
         self.0.erase(from, to).await
     }
 
-    async fn write(&mut self, offset: u32, bytes: &[u8]) -> Result<(), Self::Error> {
+    async fn write(&mut self, offset: u64, bytes: &[u8]) -> Result<(), Self::Error> {
+        let offset = offset.try_into().expect("offset fits in u32 for embedded-storage");
         self.0.write(offset, bytes).await
     }
 
