@@ -15,9 +15,7 @@ pub trait Storage {
     fn layout(&self, addr: u64) -> Option<StorageLayout>;
 
     /// The value the storage is set to after erasing
-    ///
-    /// Typically one of: 0xFF or 0x00
-    fn erase_value(&self) -> u8;
+    fn erase_value(&self) -> EraseValue;
 
     /// The capacity, or highest address (exclusive)
     fn capacity(&self) -> u64;
@@ -110,6 +108,15 @@ pub enum WriteBehavior {
     InfiniteAnd,
 }
 
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EraseValue {
+    AllOnes,
+    AllZeroes,
+    /// Erased data cannot be read and will return an error (possibly due to ECC)
+    Indeterminate,
+}
+
 impl<T: Storage> Storage for &mut T {
     type Error = T::Error;
 
@@ -118,7 +125,7 @@ impl<T: Storage> Storage for &mut T {
         T::layout(self, addr)
     }
 
-    fn erase_value(&self) -> u8 {
+    fn erase_value(&self) -> EraseValue {
         T::erase_value(self)
     }
 
@@ -174,8 +181,8 @@ where
         })
     }
 
-    fn erase_value(&self) -> u8 {
-        0xFF
+    fn erase_value(&self) -> EraseValue {
+        EraseValue::AllOnes
     }
 
     fn capacity(&self) -> u64 {
@@ -232,8 +239,8 @@ where
         })
     }
 
-    fn erase_value(&self) -> u8 {
-        0xFF
+    fn erase_value(&self) -> EraseValue {
+        EraseValue::AllOnes
     }
 
     fn capacity(&self) -> u64 {
