@@ -1,45 +1,93 @@
 #![no_std]
 
+use core::num::NonZero;
+
 #[allow(async_fn_in_trait)]
 pub trait Storage {
     type Error;
 
-    /// The smallest size that can be read from the storage.
+    /// When true, the chip has a uniform size and [Self::layout] will always return the same value
+    const UNIFORM_LAYOUT: bool;
+    /// Get the layout for an address.
+    /// If [Self::UNIFORM_LAYOUT] is true, the same layout is returned for every valid address.
     ///
-    /// This should be 1, unless there's really no way to read one byte.
-    /// Ideally the driver can emulate single-byte reads if the hardware doesn't support it.
-    const READ_SIZE: u64;
-    /// The smallest size that can be written to the storage.
-    const WRITE_SIZE: u64;
-    /// The smallest size that can be erased from the storage.
-    const ERASE_SIZE: u64;
+    /// If the address is out of range, None is returned.
+    fn layout(&self, addr: u64) -> Option<StorageLayout>;
 
     /// The value the storage is set to after erasing
     ///
     /// Typically one of: 0xFF or 0x00
-    const ERASE_VALUE: u8;
-    /// How successive writes behave
-    const WRITE_BEHAVIOR: WriteBehavior;
+    fn erase_value(&self) -> u8;
 
     /// The capacity, or highest address (exclusive)
     fn capacity(&self) -> u64;
 
     /// Read a slice of data from the storage peripheral, starting the read operation at the given address offset, and reading `bytes.len()` bytes.
-    ///
-    /// The read offset must be aligned to `READ_SIZE` and the `bytes.len()` must be a multiple of `READ_SIZE` or an error will be returned.
     async fn read(&mut self, offset: u64, bytes: &mut [u8]) -> Result<(), Self::Error>;
     /// Erase the given storage range, clearing all data within [from..to]. The given range will contain all `ERASE_VALUE` bytes afterwards.
     /// If power is lost during erase, contents of the page are undefined.
     ///
-    /// The `from` and `to` must be aligned to `ERASE_SIZE` or an error will be returned.
+    /// The `from` and `to` must be aligned to full sectors or an error will be returned.
+    ///
+    /// The use of this function is mandatory for [StorageLayout::Nor] and [StorageLayout::Nand].
+    /// For implementations of [StorageLayout::Block] devices, the erase should do a write to emulate everything being erased.
     async fn erase(&mut self, from: u64, to: u64) -> Result<(), Self::Error>;
     /// Write a slice of data to the storage peripheral, starting the write operation at the given address offset, and writing `bytes.len()` bytes.
     ///
-    /// The write offset must be aligned to `WRITE_SIZE` and the `bytes.len()` must be a multiple of `WRITE_SIZE` or an error will be returned.
-    /// The operation follows the behavior as specified by `WRITE_BEHAVIOR`.
+    /// The write offset must be aligned to [`StorageLayout::min_write_size`] and the `bytes.len()` must be a multiple of [`StorageLayout::min_write_size`] or an error will be returned.
+    ///
+    /// A byte may only be written once before being erased unless specified differently by [StorageLayout::Nor::behavior] for NOR flash or if the layout is [StorageLayout::Block].
     async fn write(&mut self, offset: u64, bytes: &[u8]) -> Result<(), Self::Error>;
     /// Wait for the last operation to finish
     async fn flush(&mut self) -> Result<(), Self::Error>;
+}
+
+#[non_exhaustive]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StorageLayout {
+    Nor {
+        behavior: WriteBehavior,
+        /// The minimum write size
+        min_write: u32,
+        /// The sector size (minimum erase size)
+        sector: u32,
+    },
+    Nand {
+        /// Number of partial page programs
+        ///
+        /// This is the amount of subdivisions of a page. They can be programmed individually, but that must be done sequentially in a page
+        nop: NonZero<u8>,
+        /// The page size
+        page: u32,
+        /// The block size (minimum erase size)
+        block: u32,
+    },
+    Block {
+        /// The block size (minumum write and erase size)
+        size: u32,
+    },
+    Ram,
+}
+
+impl StorageLayout {
+    pub const fn min_write_size(&self) -> u32 {
+        match self {
+            StorageLayout::Nor { min_write, .. } => *min_write,
+            StorageLayout::Nand { nop, page, .. } => *page / nop.get() as u32,
+            StorageLayout::Block { size } => *size,
+            StorageLayout::Ram => 1,
+        }
+    }
+
+    /// The minimum erase alignment required by the backend in bytes.
+    pub const fn erase_size(&self) -> u32 {
+        match *self {
+            StorageLayout::Nor { sector, .. } => sector,
+            StorageLayout::Nand { block, .. } => block,
+            StorageLayout::Block { size } => size,
+            StorageLayout::Ram => 1,
+        }
+    }
 }
 
 /// The way multiple writes act on the storage
@@ -60,23 +108,19 @@ pub enum WriteBehavior {
     /// The memory can be written infinitely without erasing.
     /// The new write value will be AND'ed with the existing value.
     InfiniteAnd,
-    /// The memory can be written infinitely without erasing.
-    /// The written value is also what can be read back. (No AND happening)
-    InfiniteDirect,
 }
 
 impl<T: Storage> Storage for &mut T {
     type Error = T::Error;
 
-    const READ_SIZE: u64 = T::READ_SIZE;
+    const UNIFORM_LAYOUT: bool = T::UNIFORM_LAYOUT;
+    fn layout(&self, addr: u64) -> Option<StorageLayout> {
+        T::layout(self, addr)
+    }
 
-    const WRITE_SIZE: u64 = T::WRITE_SIZE;
-
-    const ERASE_SIZE: u64 = T::ERASE_SIZE;
-
-    const ERASE_VALUE: u8 = T::ERASE_VALUE;
-
-    const WRITE_BEHAVIOR: WriteBehavior = T::WRITE_BEHAVIOR;
+    fn erase_value(&self) -> u8 {
+        T::erase_value(self)
+    }
 
     fn capacity(&self) -> u64 {
         T::capacity(self)
@@ -117,30 +161,46 @@ where
 {
     type Error = S::Error;
 
-    const READ_SIZE: u64 = S::READ_SIZE as u64;
-    const WRITE_SIZE: u64 = S::WRITE_SIZE as u64;
-    const ERASE_SIZE: u64 = S::ERASE_SIZE as u64;
+    const UNIFORM_LAYOUT: bool = true;
+    fn layout(&self, addr: u64) -> Option<StorageLayout> {
+        if addr >= self.capacity() {
+            return None;
+        }
 
-    const ERASE_VALUE: u8 = 0xFF;
-    const WRITE_BEHAVIOR: WriteBehavior = WriteBehavior::TwiceAnd;
+        Some(StorageLayout::Nor {
+            behavior: WriteBehavior::TwiceAnd,
+            min_write: S::WRITE_SIZE as u32,
+            sector: S::ERASE_SIZE as u32,
+        })
+    }
+
+    fn erase_value(&self) -> u8 {
+        0xFF
+    }
 
     fn capacity(&self) -> u64 {
         self.0.capacity() as u64
     }
 
     async fn read(&mut self, offset: u64, bytes: &mut [u8]) -> Result<(), Self::Error> {
-        let offset = offset.try_into().expect("offset fits in u32 for embedded-storage");
+        let offset = offset
+            .try_into()
+            .expect("offset fits in u32 for embedded-storage");
         self.0.read(offset, bytes).await
     }
 
     async fn erase(&mut self, from: u64, to: u64) -> Result<(), Self::Error> {
-        let from = from.try_into().expect("from fits in u32 for embedded-storage");
+        let from = from
+            .try_into()
+            .expect("from fits in u32 for embedded-storage");
         let to = to.try_into().expect("to fits in u32 for embedded-storage");
         self.0.erase(from, to).await
     }
 
     async fn write(&mut self, offset: u64, bytes: &[u8]) -> Result<(), Self::Error> {
-        let offset = offset.try_into().expect("offset fits in u32 for embedded-storage");
+        let offset = offset
+            .try_into()
+            .expect("offset fits in u32 for embedded-storage");
         self.0.write(offset, bytes).await
     }
 
@@ -159,30 +219,46 @@ where
 {
     type Error = S::Error;
 
-    const READ_SIZE: u64 = S::READ_SIZE as u64;
-    const WRITE_SIZE: u64 = S::WRITE_SIZE as u64;
-    const ERASE_SIZE: u64 = S::ERASE_SIZE as u64;
+    const UNIFORM_LAYOUT: bool = true;
+    fn layout(&self, addr: u64) -> Option<StorageLayout> {
+        if addr >= self.capacity() {
+            return None;
+        }
 
-    const ERASE_VALUE: u8 = 0xFF;
-    const WRITE_BEHAVIOR: WriteBehavior = WriteBehavior::Once;
+        Some(StorageLayout::Nor {
+            behavior: WriteBehavior::Once,
+            min_write: S::WRITE_SIZE as u32,
+            sector: S::ERASE_SIZE as u32,
+        })
+    }
+
+    fn erase_value(&self) -> u8 {
+        0xFF
+    }
 
     fn capacity(&self) -> u64 {
         self.0.capacity() as u64
     }
 
     async fn read(&mut self, offset: u64, bytes: &mut [u8]) -> Result<(), Self::Error> {
-        let offset = offset.try_into().expect("offset fits in u32 for embedded-storage");
+        let offset = offset
+            .try_into()
+            .expect("offset fits in u32 for embedded-storage");
         self.0.read(offset, bytes).await
     }
 
     async fn erase(&mut self, from: u64, to: u64) -> Result<(), Self::Error> {
-        let from = from.try_into().expect("from fits in u32 for embedded-storage");
+        let from = from
+            .try_into()
+            .expect("from fits in u32 for embedded-storage");
         let to = to.try_into().expect("to fits in u32 for embedded-storage");
         self.0.erase(from, to).await
     }
 
     async fn write(&mut self, offset: u64, bytes: &[u8]) -> Result<(), Self::Error> {
-        let offset = offset.try_into().expect("offset fits in u32 for embedded-storage");
+        let offset = offset
+            .try_into()
+            .expect("offset fits in u32 for embedded-storage");
         self.0.write(offset, bytes).await
     }
 
