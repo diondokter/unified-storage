@@ -18,6 +18,8 @@ pub trait Storage {
     ///
     /// The output of this function must be constant so a user can check this once and know the value.
     /// It's not a constant to support runtime discovery of this value by the driver.
+    ///
+    /// The returned storage type must be the same for each address. You're not allowed to mix types in one storage.
     fn layout(&self, addr: u64) -> Option<StorageLayout>;
 
     /// The value the storage is set to after erasing
