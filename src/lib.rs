@@ -6,18 +6,30 @@ use core::num::NonZero;
 pub trait Storage {
     type Error;
 
-    /// When true, the chip has a uniform size and [Self::layout] will always return the same value
-    const UNIFORM_LAYOUT: bool;
+    /// When true, the chip has a uniform size and [Self::layout] will always return the same value.
+    ///
+    /// The output of this function must be constant so a user can check this once and know the value.
+    /// It's not a constant to support runtime discovery of this value by the driver.
+    fn uniform_layout(&self) -> bool;
     /// Get the layout for an address.
-    /// If [Self::UNIFORM_LAYOUT] is true, the same layout is returned for every valid address.
+    /// If [Self::uniform_layout] is true, the same layout is returned for every valid address.
     ///
     /// If the address is out of range, None is returned.
+    ///
+    /// The output of this function must be constant so a user can check this once and know the value.
+    /// It's not a constant to support runtime discovery of this value by the driver.
     fn layout(&self, addr: u64) -> Option<StorageLayout>;
 
     /// The value the storage is set to after erasing
+    ///
+    /// The output of this function must be constant so a user can check this once and know the value.
+    /// It's not a constant to support runtime discovery of this value by the driver.
     fn erase_value(&self) -> EraseValue;
 
     /// The capacity, or highest address (exclusive)
+    ///
+    /// The output of this function must be constant so a user can check this once and know the value.
+    /// It's not a constant to support runtime discovery of this value by the driver.
     fn capacity(&self) -> u64;
 
     /// Read a slice of data from the storage peripheral, starting the read operation at the given address offset, and reading `bytes.len()` bytes.
