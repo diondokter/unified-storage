@@ -132,7 +132,10 @@ pub enum EraseValue {
 impl<T: Storage> Storage for &mut T {
     type Error = T::Error;
 
-    const UNIFORM_LAYOUT: bool = T::UNIFORM_LAYOUT;
+    fn uniform_layout(&self) -> bool {
+        T::uniform_layout(&self)
+    }
+
     fn layout(&self, addr: u64) -> Option<StorageLayout> {
         T::layout(self, addr)
     }
@@ -180,7 +183,10 @@ where
 {
     type Error = S::Error;
 
-    const UNIFORM_LAYOUT: bool = true;
+    fn uniform_layout(&self) -> bool {
+        true
+    }
+
     fn layout(&self, addr: u64) -> Option<StorageLayout> {
         if addr >= self.capacity() {
             return None;
@@ -238,7 +244,10 @@ where
 {
     type Error = S::Error;
 
-    const UNIFORM_LAYOUT: bool = true;
+    fn uniform_layout(&self) -> bool {
+        true
+    }
+
     fn layout(&self, addr: u64) -> Option<StorageLayout> {
         if addr >= self.capacity() {
             return None;
