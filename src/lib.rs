@@ -1,6 +1,9 @@
-#![no_std]
+#![cfg_attr(not(feature = "std"), no_std)]
 
 use core::num::NonZero;
+
+#[cfg(feature = "mock")]
+pub mod mock;
 
 #[allow(async_fn_in_trait)]
 pub trait Storage {
@@ -39,11 +42,11 @@ pub trait Storage {
     /// Erase the given storage range, clearing all data within [from..to]. The given range will contain all `ERASE_VALUE` bytes afterwards.
     /// If power is lost during erase, contents of the page are undefined.
     ///
-    /// The `from` and `to` must be aligned to full sectors or an error will be returned.
+    /// The `offset` and `length` must be aligned to full sectors or an error will be returned.
     ///
     /// The use of this function is mandatory for [StorageLayout::Nor] and [StorageLayout::Nand].
     /// For implementations of [StorageLayout::Block] devices, the erase should do a write to emulate everything being erased.
-    async fn erase(&mut self, from: u64, to: u64) -> Result<(), Self::Error>;
+    async fn erase(&mut self, offset: u64, length: u64) -> Result<(), Self::Error>;
     /// Write a slice of data to the storage peripheral, starting the write operation at the given address offset, and writing `bytes.len()` bytes.
     ///
     /// The write offset must be aligned to [`StorageLayout::min_write_size`] and the `bytes.len()` must be a multiple of [`StorageLayout::min_write_size`] or an error will be returned.
@@ -135,7 +138,7 @@ impl<T: Storage> Storage for &mut T {
     type Error = T::Error;
 
     fn uniform_layout(&self) -> bool {
-        T::uniform_layout(&self)
+        T::uniform_layout(self)
     }
 
     fn layout(&self, addr: u64) -> Option<StorageLayout> {
@@ -158,8 +161,8 @@ impl<T: Storage> Storage for &mut T {
         T::read(self, offset, bytes)
     }
 
-    fn erase(&mut self, from: u64, to: u64) -> impl Future<Output = Result<(), Self::Error>> {
-        T::erase(self, from, to)
+    fn erase(&mut self, offset: u64, length: u64) -> impl Future<Output = Result<(), Self::Error>> {
+        T::erase(self, offset, length)
     }
 
     fn write(
@@ -216,11 +219,13 @@ where
         self.0.read(offset, bytes).await
     }
 
-    async fn erase(&mut self, from: u64, to: u64) -> Result<(), Self::Error> {
-        let from = from
+    async fn erase(&mut self, offset: u64, length: u64) -> Result<(), Self::Error> {
+        let from = offset
             .try_into()
-            .expect("from fits in u32 for embedded-storage");
-        let to = to.try_into().expect("to fits in u32 for embedded-storage");
+            .expect("offset fits in u32 for embedded-storage");
+        let to = (offset + length)
+            .try_into()
+            .expect("offset + length fits in u32 for embedded-storage");
         self.0.erase(from, to).await
     }
 
@@ -277,11 +282,13 @@ where
         self.0.read(offset, bytes).await
     }
 
-    async fn erase(&mut self, from: u64, to: u64) -> Result<(), Self::Error> {
-        let from = from
+    async fn erase(&mut self, offset: u64, length: u64) -> Result<(), Self::Error> {
+        let from = offset
             .try_into()
-            .expect("from fits in u32 for embedded-storage");
-        let to = to.try_into().expect("to fits in u32 for embedded-storage");
+            .expect("offset fits in u32 for embedded-storage");
+        let to = (offset + length)
+            .try_into()
+            .expect("offset + length fits in u32 for embedded-storage");
         self.0.erase(from, to).await
     }
 

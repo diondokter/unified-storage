@@ -5,3 +5,10 @@ edition = "2024"
 
 [dependencies]
 embedded-storage-async = "0.4.1"
+
+[features]
+default = ["mock"]
+
+std = []
+# Todo: Mock should become its own crate so that can receive breaking changes without ecosystem considerations
+mock = ["std"]
