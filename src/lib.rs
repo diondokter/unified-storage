@@ -31,7 +31,7 @@ pub trait Storage {
     /// It's not a constant to support runtime discovery of this value by the driver.
     fn erase_value(&self) -> EraseValue;
 
-    /// The capacity, or highest address (exclusive)
+    /// The capacity in bytes, or highest address (exclusive)
     ///
     /// The output of this function must be constant so a user can check this once and know the value.
     /// It's not a constant to support runtime discovery of this value by the driver.
@@ -62,9 +62,9 @@ pub trait Storage {
 pub enum StorageLayout {
     Nor {
         behavior: WriteBehavior,
-        /// The minimum write size
+        /// The minimum write size in bytes
         min_write: u32,
-        /// The sector size (minimum erase size)
+        /// The sector size (minimum erase size) in bytes
         sector: u32,
     },
     Nand {
@@ -72,13 +72,13 @@ pub enum StorageLayout {
         ///
         /// This is the amount of subdivisions of a page. They can be programmed individually, but that must be done sequentially in a page
         nop: NonZero<u8>,
-        /// The page size
+        /// The page size in bytes
         page: u32,
-        /// The block size (minimum erase size)
+        /// The block size (minimum erase size) bytes
         block: u32,
     },
     Block {
-        /// The block size (minumum write and erase size)
+        /// The block size (minumum write and erase size) in bytes
         size: u32,
     },
     Ram,
