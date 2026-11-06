@@ -182,6 +182,12 @@ pub struct MultiwriteNorFlash<S>(S)
 where
     S: embedded_storage_async::nor_flash::MultiwriteNorFlash;
 
+impl<S: embedded_storage_async::nor_flash::MultiwriteNorFlash> From<S> for MultiwriteNorFlash<S> {
+    fn from(flash: S) -> Self {
+        Self(flash)
+    }
+}
+
 impl<S> Storage for MultiwriteNorFlash<S>
 where
     S: embedded_storage_async::nor_flash::MultiwriteNorFlash,
@@ -244,6 +250,12 @@ where
 pub struct NorFlash<S>(S)
 where
     S: embedded_storage_async::nor_flash::NorFlash;
+
+impl<S: embedded_storage_async::nor_flash::NorFlash> From<S> for NorFlash<S> {
+    fn from(flash: S) -> Self {
+        Self(flash)
+    }
+}
 
 impl<S> Storage for NorFlash<S>
 where
