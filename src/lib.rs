@@ -178,7 +178,7 @@ impl<T: Storage> Storage for &mut T {
     }
 }
 
-pub struct MultiwriteNorFlash<S>(S)
+pub struct MultiwriteNorFlash<S>(pub S)
 where
     S: embedded_storage_async::nor_flash::MultiwriteNorFlash;
 
@@ -241,7 +241,7 @@ where
     }
 }
 
-pub struct NorFlash<S>(S)
+pub struct NorFlash<S>(pub S)
 where
     S: embedded_storage_async::nor_flash::NorFlash;
 
