@@ -52,8 +52,13 @@ impl MockStorage {
 impl Storage for MockStorage {
     type Error = MockError;
 
-    fn uniform_layout(&self) -> bool {
-        self.layouts.len() == 1
+    fn uniform_layout(&self) -> Option<StorageLayout> {
+        if let Some((.., layout)) = self.layouts.first()
+            && self.layouts.len() == 1
+        {
+            return Some(*layout);
+        }
+        None
     }
 
     fn layout(&self, addr: u64) -> Option<StorageLayout> {

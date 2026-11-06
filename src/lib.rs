@@ -9,11 +9,11 @@ pub mod mock;
 pub trait Storage {
     type Error;
 
-    /// When true, the chip has a uniform size and [Self::layout] will always return the same value.
+    /// Returns the [`StorageLayout`] of the chip, if the chip has a uniform size.
     ///
     /// The output of this function must be constant so a user can check this once and know the value.
     /// It's not a constant to support runtime discovery of this value by the driver.
-    fn uniform_layout(&self) -> bool;
+    fn uniform_layout(&self) -> Option<StorageLayout>;
     /// Get the layout for an address.
     /// If [Self::uniform_layout] is true, the same layout is returned for every valid address.
     ///
@@ -137,7 +137,7 @@ pub enum EraseValue {
 impl<T: Storage> Storage for &mut T {
     type Error = T::Error;
 
-    fn uniform_layout(&self) -> bool {
+    fn uniform_layout(&self) -> Option<StorageLayout> {
         T::uniform_layout(self)
     }
 
@@ -178,18 +178,35 @@ impl<T: Storage> Storage for &mut T {
     }
 }
 
-pub struct MultiWriteNorFlash<S>(S)
+pub struct MultiwriteNorFlash<S>(S)
 where
     S: embedded_storage_async::nor_flash::MultiwriteNorFlash;
 
-impl<S> Storage for MultiWriteNorFlash<S>
+impl<S> MultiwriteNorFlash<S>
+where
+    S: embedded_storage_async::nor_flash::MultiwriteNorFlash,
+{
+    const LAYOUT: StorageLayout = StorageLayout::Nor {
+        behavior: WriteBehavior::TwiceAnd,
+        min_write: S::WRITE_SIZE as u32,
+        sector: S::ERASE_SIZE as u32,
+    };
+}
+
+impl<S: embedded_storage_async::nor_flash::MultiwriteNorFlash> From<S> for MultiwriteNorFlash<S> {
+    fn from(flash: S) -> Self {
+        Self(flash)
+    }
+}
+
+impl<S> Storage for MultiwriteNorFlash<S>
 where
     S: embedded_storage_async::nor_flash::MultiwriteNorFlash,
 {
     type Error = S::Error;
 
-    fn uniform_layout(&self) -> bool {
-        true
+    fn uniform_layout(&self) -> Option<StorageLayout> {
+        Some(Self::LAYOUT)
     }
 
     fn layout(&self, addr: u64) -> Option<StorageLayout> {
@@ -197,11 +214,7 @@ where
             return None;
         }
 
-        Some(StorageLayout::Nor {
-            behavior: WriteBehavior::TwiceAnd,
-            min_write: S::WRITE_SIZE as u32,
-            sector: S::ERASE_SIZE as u32,
-        })
+        Some(Self::LAYOUT)
     }
 
     fn erase_value(&self) -> EraseValue {
@@ -245,14 +258,31 @@ pub struct NorFlash<S>(S)
 where
     S: embedded_storage_async::nor_flash::NorFlash;
 
+impl<S: embedded_storage_async::nor_flash::NorFlash> From<S> for NorFlash<S> {
+    fn from(flash: S) -> Self {
+        Self(flash)
+    }
+}
+
+impl<S> NorFlash<S>
+where
+    S: embedded_storage_async::nor_flash::NorFlash,
+{
+    const LAYOUT: StorageLayout = StorageLayout::Nor {
+        behavior: WriteBehavior::Once,
+        min_write: S::WRITE_SIZE as u32,
+        sector: S::ERASE_SIZE as u32,
+    };
+}
+
 impl<S> Storage for NorFlash<S>
 where
     S: embedded_storage_async::nor_flash::NorFlash,
 {
     type Error = S::Error;
 
-    fn uniform_layout(&self) -> bool {
-        true
+    fn uniform_layout(&self) -> Option<StorageLayout> {
+        Some(Self::LAYOUT)
     }
 
     fn layout(&self, addr: u64) -> Option<StorageLayout> {
@@ -260,11 +290,7 @@ where
             return None;
         }
 
-        Some(StorageLayout::Nor {
-            behavior: WriteBehavior::Once,
-            min_write: S::WRITE_SIZE as u32,
-            sector: S::ERASE_SIZE as u32,
-        })
+        Some(Self::LAYOUT)
     }
 
     fn erase_value(&self) -> EraseValue {
