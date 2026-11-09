@@ -7,7 +7,7 @@ pub mod mock;
 
 #[allow(async_fn_in_trait)]
 pub trait Storage {
-    type Error;
+    type Error: core::fmt::Debug;
 
     /// When true, the chip has a uniform size and [Self::layout] will always return the same value.
     ///
